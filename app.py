@@ -54,3 +54,75 @@ def get_conversational_chain(model_name,vectorstore = None,api_key = None):
         prompt = PromptTemplate(template=prompt_template,input_variables=["context","question"])
         chain = load_qa_chain(model,chain_type='stuff',prompt = prompt)
         return chain 
+    
+
+    def user_input(user_question,model_name,api_key,pdf_docs,conversation_history):
+        if api_key is None or pdf_docs is None:
+            st.warning("plese do provide apiKey and pdf_docs")
+            return
+        pdf_text = get_pdf_text(pdf_docs)
+        text_chunks = get_text_chunks(pdf_text,model)
+        user_question_output = ""
+        response_output = ""
+        if model_name == "Google AI":
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001",google_api_key=api_key)
+            new_db = FAISS.load_local("faiss_index",embeddings,allow_dangerous_deserialization=True)
+            docs = new_db.similarity_search(user_question)
+            chain = get_conversational_chain("Google AI",vectorstore=new_db,api_key=api_key)
+            response = chain({'input_documents':docs , 'question':user_question},return_only_outputs=True)
+            user_question_output = user_question
+            response_output = response['output_text']
+            pdf_names = [pdf.names for pdf in pdf_docs] if pdf_docs else []
+            conversation_history.append((user_question_output,response_output,model_name,datetime.now().strftime('%Y-%m-%d %H:%M:%S'),"".join(pdf_names)))
+            st.markdown(
+        f"""
+        <style>
+            .chat-message {{
+                padding: 1.5rem;
+                border-radius: 0.5rem;
+                margin-bottom: 1rem;
+                display: flex;
+            }}
+            .chat-message.user {{
+                background-color: #2b313e;
+            }}
+            .chat-message.bot {{
+                background-color: #475063;
+            }}
+            .chat-message .avatar {{
+                width: 20%;
+            }}
+            .chat-message .avatar img {{
+                max-width: 78px;
+                max-height: 78px;
+                border-radius: 50%;
+                object-fit: cover;
+            }}
+            .chat-message .message {{
+                width: 80%;
+                padding: 0 1.5rem;
+                color: #fff;
+            }}
+            .chat-message .info {{
+                font-size: 0.8rem;
+                margin-top: 0.5rem;
+                color: #ccc;
+            }}
+        </style>
+        <div class="chat-message user">
+            <div class="avatar">
+                <img src="https://i.ibb.co/CKpTnWr/user-icon-2048x2048-ihoxz4vq.png">
+            </div>    
+            <div class="message">{user_question_output}</div>
+        </div>
+        <div class="chat-message bot">
+            <div class="avatar">
+                <img src="https://i.ibb.co/wNmYHsx/langchain-logo.webp" >
+            </div>
+            <div class="message">{response_output}</div>
+            </div>
+            
+        """,
+        unsafe_allow_html=True
+    )
+    
